@@ -16,6 +16,7 @@ import customerRouter from '../modules/customer/customer.router';
 import locationRouter from '../modules/location/location.router';
 import lowStockAlertRouter from '../modules/lowStockAlert/lowStockAlert.router';
 import invoiceRouter from '../modules/invoice/invoice.router';
+import addToCartRouter from '../modules/addToCart/addToCart.router';
 
 const router = Router();
 
@@ -91,6 +92,10 @@ const moduleRoutes = [
       {
             path: '/invoices',
             route: invoiceRouter,
+      },
+      {
+            path: '/add-to-cart',
+            route: addToCartRouter,
       },
       {
             path: '/customer',
