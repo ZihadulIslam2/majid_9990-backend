@@ -61,9 +61,12 @@ const createAddToCart = async (payload: IAddToCartPayload) => {
       if (existing) {
             existing.quantity += quantity;
             await existing.save();
-            return await existing
-                  .populate('itemId')
-                  .populate('shopkeeperId', 'firstName lastName email phone role shopName');
+            await existing.populate([
+                  { path: 'itemId' },
+                  { path: 'shopkeeperId', select: 'firstName lastName email phone role shopName' },
+            ]);
+
+            return existing;
       }
 
       const result = await AddToCart.create({
@@ -72,7 +75,12 @@ const createAddToCart = async (payload: IAddToCartPayload) => {
             quantity,
       });
 
-      return await result.populate('itemId').populate('shopkeeperId', 'firstName lastName email phone role shopName');
+      await result.populate([
+            { path: 'itemId' },
+            { path: 'shopkeeperId', select: 'firstName lastName email phone role shopName' },
+      ]);
+
+      return result;
 };
 
 const getAddToCartByShopkeeperId = async (shopkeeperId: string) => {
