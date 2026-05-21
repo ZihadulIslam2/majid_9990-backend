@@ -1,5 +1,10 @@
 # majid_9990-backend
 
+## API documentation
+
+Swagger UI is available at `/api-docs` after the server starts.
+The OpenAPI JSON is served at `/api-docs.json` and is regenerated automatically from the route files on startup.
+
 ## Device analysis endpoints
 
 The device-check module exposes three public POST routes under the existing API mount points:
@@ -43,23 +48,24 @@ The same `device-analysis` route is also available under `/api/v1/device/device-
 - `serviceId` is optional and defaults to the current `DHRU_SERVICE_ID` behavior.
 - Existing `/check` and `/risk-analysis` response shapes remain unchanged.
 
-
 ## Main features based on project goals
-1. Device checks 
+
+1. Device checks
 2. smart invoice
-3. Inventory 
-4. Subscription and popup Payments 
+3. Inventory
+4. Subscription and popup Payments
 5. Barcode
-6. Ai features  
+6. Ai features
 7. Repairing feature
 
 ### Bulk Upload inventory from CSV
+
 post /create-from-barcode/bulk
+
 - Details: It accepts a CSV, XLS, or XLSX upload on the file field, reads the first worksheet, maps each row into the same payload shape used by createInventoryFromBarcode, and processes rows one by one. It supports header-based sheets with fields like code or barcode, userId, imeiNumber, purchasePrice, and currentState, and it also falls back to positional columns if there is no header row. The response returns a summary plus per-row success or failure details.
 
-
-
 ### How the payment system is working and deduct form users
+
 When a Stripe payment is confirmed, the amount is added to the user balance in payment.service.ts. Every credit and debit is also written to a new transaction ledger in balanceTransaction.model.ts, with the supporting logic in balanceTransaction.service.ts. The user schema now stores balance directly in user.model.ts.
 
 For IMEI/device-check requests, the API is now protected and checks the service price from the catalog before calling the upstream provider. If the service is not free, the price is deducted from the user balance first. If the balance is not enough, the request is rejected and the service response is not returned. This is wired through dhru.routes.ts, dhru.controller.ts, and riskAnalysis.controller.ts.
@@ -76,58 +82,54 @@ A new history API was added so the user can see balance changes, including credi
 - If balance is not enough, the request fails.
 - User can view all balance activity through the history endpoint.
 
-
-
- ## Device checks (with details)
-   
-
+## Device checks (with details)
 
 ### get '/services'
-Now returns prices converted into the client’s local currency, with a currency field like BDT and the price field rewritten to the converted amount. I wired it through client IP detection, geo lookup, and a USD-to-local-rate fetch in src/modules/location/location.service.ts and src/modules/deviceCheck/dhru.controller.ts. ExchangeRate API implemented. 
 
-### Check devices for bundeling 
+Now returns prices converted into the client’s local currency, with a currency field like BDT and the price field rewritten to the converted amount. I wired it through client IP detection, geo lookup, and a USD-to-local-rate fetch in src/modules/location/location.service.ts and src/modules/deviceCheck/dhru.controller.ts. ExchangeRate API implemented.
+
+### Check devices for bundeling
 
 Implementation Summary:
+
 1. New processMultipleServiceCheck function - Handles bundled services (like your iPhone/Mac/Samsung packages):
 
 Runs IMEI checks in parallel against all serviceIds in the array
 Checks cache for each individual service
 Charges only the custom service price once (not per service)
 Refunds if all checks fail
-Merges all results into one response
-2. Modified processSingleImeiCheck function - Now detects and routes bundled services:
+Merges all results into one response 2. Modified processSingleImeiCheck function - Now detects and routes bundled services:
 
 Checks if service.serviceIds array has multiple items
 Routes to processMultipleServiceCheck if it's a bundle
 Otherwise follows the original single-service path
 
-
 {
-  "ok": true,
-  "message": "Bundled IMEI check completed (5/5 services)",
-  "data": {
-    "bundledServiceId": 1000,
-    "bundledServiceName": "iPhone all in one /best before buy",
-    "bundledServiceCategory": "favourite",
-    "totalChecks": 5,
-    "successfulChecks": 5,
-    "failedChecks": 0,
-    "oldGenerated": false,
-    "serviceResults": [
-      {
-        "serviceId": 2001,
-        "cached": false,
-        "provider": "dhru",
-        "data": {...}
-      }
-      // ...results from all 5 services
-    ],
-    "mergedInfo": {
-      "deviceStatus": [
-        {"serviceId": 2001, "value": "Good"},
-        {"serviceId": 2002, "value": "Good"}
-        // ...aggregated data from all services
-      ]
-    }
-  }
+"ok": true,
+"message": "Bundled IMEI check completed (5/5 services)",
+"data": {
+"bundledServiceId": 1000,
+"bundledServiceName": "iPhone all in one /best before buy",
+"bundledServiceCategory": "favourite",
+"totalChecks": 5,
+"successfulChecks": 5,
+"failedChecks": 0,
+"oldGenerated": false,
+"serviceResults": [
+{
+"serviceId": 2001,
+"cached": false,
+"provider": "dhru",
+"data": {...}
+}
+// ...results from all 5 services
+],
+"mergedInfo": {
+"deviceStatus": [
+{"serviceId": 2001, "value": "Good"},
+{"serviceId": 2002, "value": "Good"}
+// ...aggregated data from all services
+]
+}
+}
 }

@@ -1,12 +1,25 @@
 import app from './app';
 import dotenv from 'dotenv';
 import { connectDB } from './config/db';
+import { ensureSwaggerSpec } from './config/swagger';
 dotenv.config();
 
 const PORT = process.env.PORT || 5000;
 
-connectDB().then(() => {
+const bootstrap = async () => {
+      const [swaggerResult, dbResult] = await Promise.allSettled([ensureSwaggerSpec(), connectDB()]);
+
+      if (swaggerResult.status === 'rejected') {
+            console.error('Swagger spec generation failed:', swaggerResult.reason);
+      }
+
+      if (dbResult.status === 'rejected') {
+            throw dbResult.reason;
+      }
+
       app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
       });
-});
+};
+
+bootstrap();
