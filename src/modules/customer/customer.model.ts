@@ -11,8 +11,11 @@ const customerSchema = new Schema<ICustomer>(
             shopkeeperId: { type: Schema.Types.ObjectId, ref: 'User' },
             salesMethod: { type: String, trim: true },
             actualSalePrice: { type: Number },
+            paymentType: { type: String, trim: true },
+            alreadyPaid: { type: Number },
+            customerId: { type: String, trim: true },
       },
-      {
+      { 
             timestamps: true,
             versionKey: false,
       }

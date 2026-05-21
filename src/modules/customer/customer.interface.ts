@@ -9,6 +9,9 @@ export interface ICustomer {
       shopkeeperId?: Types.ObjectId;
       salesMethod?: string;
       actualSalePrice?: number;
+      paymentType?: string;
+      alreadyPaid?: number;
+      customerId?: string;
       createdAt?: Date;
       updatedAt?: Date;
 }
