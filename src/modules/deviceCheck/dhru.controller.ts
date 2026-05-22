@@ -19,16 +19,16 @@ import ScanInfo from './scanInfo.model';
 
 type SingleImeiCheckResult =
       | {
-              ok: true;
-              message: string;
-              data: Record<string, unknown>;
-        }
+            ok: true;
+            message: string;
+            data: Record<string, unknown>;
+      }
       | {
-              ok: false;
-              statusCode: number;
-              message: string;
-              data?: unknown;
-        };
+            ok: false;
+            statusCode: number;
+            message: string;
+            data?: unknown;
+      };
 
 type BatchImeiItemResult = {
       rowNumber: number;
@@ -563,9 +563,9 @@ const extractImeisFromWorkbook = (filePath: string) => {
       const headerLooksLikeImeiColumn = firstRow.some((cell) => cell === 'imei' || cell.includes('imei'));
       const imeiColumnIndex = headerLooksLikeImeiColumn
             ? Math.max(
-                    firstRow.findIndex((cell) => cell === 'imei' || cell.includes('imei')),
-                    0
-              )
+                  firstRow.findIndex((cell) => cell === 'imei' || cell.includes('imei')),
+                  0
+            )
             : 0;
       const dataRows = headerLooksLikeImeiColumn ? rows.slice(1) : rows;
 
@@ -830,6 +830,7 @@ export const checkImeiFromDhruV2 = async (req: Request, res: Response, next: Nex
                                                       ok: r.ok,
                                                       message: r.message,
                                                 })),
+                                                oldGenerated: false,
                                           },
                                     } as SingleImeiCheckResult;
                               }
@@ -857,9 +858,15 @@ export const checkImeiFromDhruV2 = async (req: Request, res: Response, next: Nex
                                     String(service.name ?? 'unknown')
                               );
 
+                              const successfulResults = checkResults.filter((r) => r.ok);
+                              const oldGenerated =
+                                    successfulResults.length > 0
+                                          ? successfulResults.every((r) => Boolean(r.cached))
+                                          : false;
+
                               return {
                                     ok: true,
-                                    message: `Bundled IMEI check completed (${checkResults.filter((r) => r.ok).length}/${checkResults.length} services)`,
+                                    message: `Bundled IMEI check completed (${successfulResults.length}/${checkResults.length} services)`,
                                     data: {
                                           bundledServiceId: service.serviceId,
                                           bundledServiceName: service.name,
@@ -868,6 +875,7 @@ export const checkImeiFromDhruV2 = async (req: Request, res: Response, next: Nex
                                           providerResults: mergedParsed,
                                           riskMeter: aiAnalysis.riskMeter,
                                           aiInsight: aiAnalysis.aiInsight,
+                                          oldGenerated,
                                     },
                               } as SingleImeiCheckResult;
                         }
@@ -888,6 +896,7 @@ export const checkImeiFromDhruV2 = async (req: Request, res: Response, next: Nex
                                           ),
                                           riskMeter: existingScanInfo.riskMeter ?? null,
                                           aiInsight: existingScanInfo.aiInsight ?? null,
+                                          oldGenerated: true,
                                     },
                               } as SingleImeiCheckResult;
                         }
@@ -917,7 +926,10 @@ export const checkImeiFromDhruV2 = async (req: Request, res: Response, next: Nex
                                     ok: false,
                                     statusCode: result.statusCode,
                                     message: result.message,
-                                    data: result.data,
+                                    data: {
+                                          ...(result.data as Record<string, unknown>),
+                                          oldGenerated: false,
+                                    },
                               } as SingleImeiCheckResult;
                         }
 
@@ -939,6 +951,7 @@ export const checkImeiFromDhruV2 = async (req: Request, res: Response, next: Nex
                                           ),
                                           String(result.provider)
                                     )),
+                                    oldGenerated: false,
                               },
                         } as SingleImeiCheckResult;
                   } catch (error) {

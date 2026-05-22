@@ -72,7 +72,7 @@ const createInvoice = async (payload: IInvoicePayload, file?: Express.Multer.Fil
       const invoiceFile = await buildInvoiceFile(file);
 
       const type = String(payload.type ?? '').trim();
-      const customerInfo = normalizeObjectId(payload.customerInfo);
+      const customerInfo = normalizeObjectId(payload.customerInfo ?? undefined);
       const itemsIds = normalizeObjectIdArray(payload.itemsIds);
 
       if (!type) {
@@ -107,7 +107,7 @@ const getInvoiceByShopkeeperId = async (shopkeeperId: string) => {
 const getAllInvoices = async () => {
       return await Invoice.find()
             .populate('shopkeeperId')
-            .populate('customerInfo' )
+            .populate('customerInfo')
             .populate('itemsIds', 'itemName imeiNumber expectedPrice image')
             .sort({ createdAt: -1 });
 };
