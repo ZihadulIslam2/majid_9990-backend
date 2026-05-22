@@ -147,8 +147,8 @@ const extractModelFieldsFromModule = async (routeFilePath: string) => {
                               if (/Number\b/.test(rawType)) inferred = 'number';
                               else if (/Boolean\b/.test(rawType)) inferred = 'boolean';
                               else if (/Date\b/.test(rawType)) inferred = 'string';
-                              else if (/Schema\.Types\.ObjectId/.test(rawType)) inferred = 'string';
                               else if (/\[/.test(rawType)) inferred = 'array';
+                              else if (/Schema\.Types\.ObjectId/.test(rawType)) inferred = 'string';
                               else inferred = 'string';
                         } else {
                               // fallback heuristics

@@ -44,11 +44,36 @@ const buildInvoiceFile = async (file?: Express.Multer.File) => {
       };
 };
 
+const normalizeObjectId = (value?: string) => {
+      const trimmedValue = String(value ?? '').trim();
+
+      if (!trimmedValue || !Types.ObjectId.isValid(trimmedValue)) {
+            return null;
+      }
+
+      return new Types.ObjectId(trimmedValue);
+};
+
+const normalizeObjectIdArray = (value?: string | string[]) => {
+      const values = Array.isArray(value) ? value : [];
+
+      if (!Array.isArray(value) && value) {
+            values.push(value);
+      }
+
+      return values
+            .map((item) => String(item ?? '').trim())
+            .filter((item) => item && Types.ObjectId.isValid(item))
+            .map((item) => new Types.ObjectId(item));
+};
+
 const createInvoice = async (payload: IInvoicePayload, file?: Express.Multer.File): Promise<IInvoice> => {
       const shopkeeperId = await resolveShopkeeperId(payload.shopkeeperId);
       const invoiceFile = await buildInvoiceFile(file);
 
       const type = String(payload.type ?? '').trim();
+      const customerInfo = normalizeObjectId(payload.customerInfo);
+      const itemsIds = normalizeObjectIdArray(payload.itemsIds);
 
       if (!type) {
             throw new AppError('type is required', StatusCodes.BAD_REQUEST);
@@ -58,6 +83,8 @@ const createInvoice = async (payload: IInvoicePayload, file?: Express.Multer.Fil
             shopkeeperId,
             invoice: invoiceFile,
             type,
+            customerInfo,
+            itemsIds,
       });
 
       return result;
@@ -107,17 +134,14 @@ const updateInvoice = async (id: string, payload: IInvoicePayload, file?: Expres
       }
 
       if (payload.customerInfo) {
-            const customerInfo = String(payload.customerInfo ?? '').trim();
-            if (customerInfo && Types.ObjectId.isValid(customerInfo)) {
-                  updateData.customerInfo = new Types.ObjectId(customerInfo);
+            const customerInfo = normalizeObjectId(payload.customerInfo);
+            if (customerInfo) {
+                  updateData.customerInfo = customerInfo;
             }
       }
 
       if (payload.itemsIds && Array.isArray(payload.itemsIds)) {
-            updateData.itemsIds = payload.itemsIds
-                  .map(id => String(id ?? '').trim())
-                  .filter(id => id && Types.ObjectId.isValid(id))
-                  .map(id => new Types.ObjectId(id));
+            updateData.itemsIds = normalizeObjectIdArray(payload.itemsIds);
       }
 
       if (file) {
