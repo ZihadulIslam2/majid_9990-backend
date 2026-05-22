@@ -734,20 +734,62 @@ export const checkImeiFromDhruV2 = async (req: Request, res: Response, next: Nex
 
                               const checkResults = await Promise.all(
                                     svcIds.map(async (svcId) => {
+                                          // Try DB cache first unless fresh generation requested
+                                          if (!shouldGenerateFresh) {
+                                                const existingScanInfo = await getExistingScanInfoByImei(imei, svcId);
+                                                if (existingScanInfo) {
+                                                      return {
+                                                            serviceId: svcId,
+                                                            ok: true,
+                                                            cached: true,
+                                                            provider: null,
+                                                            // extract parsed key/value pairs from stored providerData
+                                                            parsedProviderData: extractProviderDataFromHtml(
+                                                                  (existingScanInfo.providerData as Record<string, any>)
+                                                                        ?.result ?? null
+                                                            ),
+                                                            // surface cached AI/risk when available so V2 responses remain rich
+                                                            aiInsight: existingScanInfo.aiInsight ?? null,
+                                                            riskMeter: existingScanInfo.riskMeter ?? null,
+                                                      };
+                                                }
+                                          }
+
                                           const result = await runImeiCheck(String(imei), svcId, userId);
+                                          if (!result.ok) {
+                                                return {
+                                                      serviceId: svcId,
+                                                      ok: false,
+                                                      cached: false,
+                                                      provider: null,
+                                                      message: result.message,
+                                                      statusCode: result.statusCode,
+                                                      parsedProviderData: null,
+                                                      aiInsight: null,
+                                                      riskMeter: null,
+                                                };
+                                          }
+
+                                          const parsed = extractProviderDataFromHtml(
+                                                (result.providerData as Record<string, any>)?.result ?? null
+                                          );
+
+                                          const aiAnalysis = await analyzeParsedProviderDataWithAi(
+                                                String(imei),
+                                                parsed,
+                                                String(result.provider)
+                                          );
+
                                           return {
                                                 serviceId: svcId,
-                                                ok: result.ok,
-                                                provider: result.ok ? result.provider : null,
-                                                message: !result.ok ? result.message : undefined,
-                                                statusCode: !result.ok ? result.statusCode : undefined,
-                                                // only include parsed key/value pairs to avoid duplication
-                                                parsedProviderData: result.ok
-                                                      ? extractProviderDataFromHtml(
-                                                              (result.providerData as Record<string, any>)?.result ??
-                                                                    null
-                                                        )
-                                                      : null,
+                                                ok: true,
+                                                cached: false,
+                                                provider: result.provider,
+                                                message: undefined,
+                                                statusCode: undefined,
+                                                parsedProviderData: parsed,
+                                                aiInsight: aiAnalysis.aiInsight,
+                                                riskMeter: aiAnalysis.riskMeter,
                                           };
                                     })
                               );
@@ -808,6 +850,7 @@ export const checkImeiFromDhruV2 = async (req: Request, res: Response, next: Nex
                                     }
                               }
 
+                              // Run AI analysis over the merged parsed output (keeps V2 behavior)
                               const aiAnalysis = await analyzeParsedProviderDataWithAi(
                                     String(imei),
                                     mergedParsed,
@@ -829,7 +872,27 @@ export const checkImeiFromDhruV2 = async (req: Request, res: Response, next: Nex
                               } as SingleImeiCheckResult;
                         }
 
-                        // Single serviceId: always call provider (no cache)
+                        // Single serviceId: try cache first unless fresh requested
+                        const existingScanInfo = shouldGenerateFresh
+                              ? null
+                              : await getExistingScanInfoByImei(imei, serviceId);
+
+                        if (existingScanInfo) {
+                              return {
+                                    ok: true,
+                                    message: 'IMEI data fetched from database',
+                                    data: {
+                                          provider: null,
+                                          parsedProviderData: extractProviderDataFromHtml(
+                                                (existingScanInfo.providerData as Record<string, any>)?.result ?? null
+                                          ),
+                                          riskMeter: existingScanInfo.riskMeter ?? null,
+                                          aiInsight: existingScanInfo.aiInsight ?? null,
+                                    },
+                              } as SingleImeiCheckResult;
+                        }
+
+                        // No cache -> call provider
                         const result = await runImeiCheck(String(imei), serviceId, userId);
 
                         if (!result.ok) {
