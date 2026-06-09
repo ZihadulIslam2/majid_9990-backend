@@ -285,6 +285,25 @@ const generateTechnicianFeedbackByRequest = async (id: string) => {
       return generateAndSaveTechnicianFeedback(id);
 };
 
+const getUserDescriptions = async (userId: string) => {
+      if (!Types.ObjectId.isValid(userId)) {
+            throw new AppError('Valid user id is required', StatusCodes.BAD_REQUEST);
+      }
+
+      const repairRequests = await RepairRequest.find(
+            { userId },
+            {
+                  description: 1,
+                  deviceModel: 1,
+                  status: 1,
+                  createdAt: 1,
+            }
+      ).sort({ createdAt: -1 });
+
+      return repairRequests;
+};
+
+
 const repairRequestService = {
       addNewRepairRequest,
       getMyRepairRequestsHistory,
@@ -293,6 +312,7 @@ const repairRequestService = {
       addNoteByShopKeeper,
       addTeachNoteByTechnician,
       generateTechnicianFeedbackByRequest,
+      getUserDescriptions,
 };
 
 export default repairRequestService;
