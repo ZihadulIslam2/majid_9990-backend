@@ -1,165 +1,202 @@
-import { Inventory } from "../inventory/inventory.model";
-import { User } from "../user/user.model";
+import { StatusCodes } from 'http-status-codes';
+import { Types } from 'mongoose';
+import AppError from '../../errors/AppError';
+import { Invoice } from '../invoice/invoice.model';
 
+interface IDashboardStats {
+      totalSales: number;
+      totalProfit: number;
+      totalOrders: number;
+      avgOrderValue: number;
+      salesGrowth: number;
+      profitGrowth: number;
+      ordersGrowth: number;
+      avgOrderGrowth: number;
+}
 
-const adminDashboardChart = async (query: any) => {
-      const { filter = '30days' } = query;
+interface IPeriodData {
+      totalSales: number;
+      totalProfit: number;
+      totalOrders: number;
+      avgOrderValue: number;
+}
 
-      let startDate = new Date();
-      let groupFormat = '%Y-%m-%d';
+const getDateRange = (filter: 'daily' | 'monthly' | 'yearly') => {
+      const now = new Date();
+      const start = new Date();
+      const end = new Date();
 
-      // 🔹 Filter + grouping format
-      if (filter === '30days') {
-            startDate.setDate(startDate.getDate() - 30);
-            groupFormat = '%Y-%m-%d'; // day wise
-      } else if (filter === '6months') {
-            startDate.setMonth(startDate.getMonth() - 6);
-            groupFormat = '%Y-%m'; // month wise
-      } else if (filter === '12months') {
-            startDate.setFullYear(startDate.getFullYear() - 1);
-            groupFormat = '%Y-%m'; // month wise
+      switch (filter) {
+            case 'daily':
+                  start.setHours(0, 0, 0, 0);
+                  end.setHours(23, 59, 59, 999);
+                  break;
+            case 'monthly':
+                  start.setDate(1);
+                  start.setHours(0, 0, 0, 0);
+                  end.setMonth(end.getMonth() + 1);
+                  end.setDate(0);
+                  end.setHours(23, 59, 59, 999);
+                  break;
+            case 'yearly':
+                  start.setMonth(0, 1);
+                  start.setHours(0, 0, 0, 0);
+                  end.setMonth(11, 31);
+                  end.setHours(23, 59, 59, 999);
+                  break;
+            default:
+                  throw new AppError('Invalid filter type', StatusCodes.BAD_REQUEST);
       }
 
-      const result = await User.aggregate([
+      return { start, end };
+};
+
+const getPreviousPeriodRange = (filter: 'daily' | 'monthly' | 'yearly') => {
+      const now = new Date();
+      const start = new Date();
+      const end = new Date();
+
+      switch (filter) {
+            case 'daily':
+                  start.setDate(start.getDate() - 1);
+                  start.setHours(0, 0, 0, 0);
+                  end.setDate(end.getDate() - 1);
+                  end.setHours(23, 59, 59, 999);
+                  break;
+            case 'monthly':
+                  start.setMonth(start.getMonth() - 1);
+                  start.setDate(1);
+                  start.setHours(0, 0, 0, 0);
+                  end.setMonth(end.getMonth());
+                  end.setDate(0);
+                  end.setHours(23, 59, 59, 999);
+                  break;
+            case 'yearly':
+                  start.setFullYear(start.getFullYear() - 1);
+                  start.setMonth(0, 1);
+                  start.setHours(0, 0, 0, 0);
+                  end.setFullYear(end.getFullYear() - 1);
+                  end.setMonth(11, 31);
+                  end.setHours(23, 59, 59, 999);
+                  break;
+            default:
+                  throw new AppError('Invalid filter type', StatusCodes.BAD_REQUEST);
+      }
+
+      return { start, end };
+};
+
+const calculateStats = async (startDate: Date, endDate: Date): Promise<IPeriodData> => {
+      const result = await Invoice.aggregate([
             {
                   $match: {
-                        createdAt: { $gte: startDate },
+                        createdAt: { $gte: startDate, $lte: endDate },
+                        totalAmount: { $ne: null },
                   },
             },
             {
                   $group: {
-                        _id: {
-                              date: {
-                                    $dateToString: { format: groupFormat, date: '$createdAt' },
-                              },
-                              role: '$role',
-                        },
-                        count: { $sum: 1 },
+                        _id: null,
+                        totalSales: { $sum: '$totalAmount' },
+                        totalOrders: { $sum: 1 },
+                        avgOrderValue: { $avg: '$totalAmount' },
+                        // Note: You need to add a 'cost' field to your invoice schema for profit calculation
+                        // totalProfit: { $sum: { $subtract: ['$totalAmount', '$cost'] } },
                   },
-            },
-            {
-                  $sort: { '_id.date': 1 },
             },
       ]);
 
-      // 🔹 Format for chart
-      const chartData: any = {};
-
-      result.forEach((item) => {
-            const date = item._id.date;
-            const role = item._id.role;
-
-            if (!chartData[date]) {
-                  chartData[date] = {
-                        date,
-                        user: 0,
-                        shopkeeper: 0,
-                  };
-            }
-
-            chartData[date][role] = item.count;
-      });
-
-      return Object.values(chartData);
-};
-
-
-const getAdminDashboardAnalytics = async () => {
-  const now = new Date();
-
-  const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const endOfPrevMonth = startOfCurrentMonth;
-
-  const currentUsers = await User.countDocuments({
-    role: 'user',
-    createdAt: { $gte: startOfCurrentMonth },
-  });
-
-  const prevUsers = await User.countDocuments({
-    role: 'user',
-    createdAt: { $gte: startOfPrevMonth, $lt: endOfPrevMonth },
-  });
-
-  // ===== SHOPKEEPERS =====
-  const currentShopkeepers = await User.countDocuments({
-    role: 'shopkeeper',
-    createdAt: { $gte: startOfCurrentMonth },
-  });
-
-  const prevShopkeepers = await User.countDocuments({
-    role: 'shopkeeper',
-    createdAt: { $gte: startOfPrevMonth, $lt: endOfPrevMonth },
-  });
-
-  const calcPercent = (current: number, prev: number) => {
-    if (prev === 0) return current === 0 ? 0 : 100;
-    return ((current - prev) / prev) * 100;
-  };
-
-  return {
-    totalUsers: await User.countDocuments({ role: 'user' }),
-    totalShopkeepers: await User.countDocuments({ role: 'shopkeeper' }),
-    userGrowth: calcPercent(currentUsers, prevUsers),
-    shopkeeperGrowth: calcPercent(currentShopkeepers, prevShopkeepers),
-  };
-};
-
-
-const getShopkeeperDashboardAnalytics = async (shopkeeperId: string) => {
-      const shopkeeper = await User.findById(shopkeeperId);
-
-      if (!shopkeeper) {
-            throw new Error('Shopkeeper not found');
+      if (result.length === 0) {
+            return {
+                  totalSales: 0,
+                  totalProfit: 0,
+                  totalOrders: 0,
+                  avgOrderValue: 0,
+            };
       }
 
-      const now = new Date();
+      return {
+            totalSales: result[0].totalSales || 0,
+            totalProfit: 0, // Will calculate if cost field exists
+            totalOrders: result[0].totalOrders || 0,
+            avgOrderValue: result[0].avgOrderValue || 0,
+      };
+};
 
-      // ===== CURRENT MONTH =====
-      const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+const calculateGrowth = (current: number, previous: number): number => {
+      if (previous === 0) return 0;
+      return parseFloat((((current - previous) / previous) * 100).toFixed(1));
+};
 
-      // ===== PREVIOUS MONTH =====
-      const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const endOfPrevMonth = startOfCurrentMonth;
+const getDashboardStats = async (
+      shopkeeperId?: string,
+      filter: 'daily' | 'monthly' | 'yearly' = 'monthly'
+): Promise<IDashboardStats> => {
+      const { start, end } = getDateRange(filter);
+      const { start: prevStart, end: prevEnd } = getPreviousPeriodRange(filter);
 
-      // ===== TOTAL INVOICES =====
-      const totalInvoices = await Inventory.countDocuments({
-            userId: shopkeeperId,
-      });
-
-      // ===== CURRENT MONTH INVOICES =====
-      const currentInvoices = await Inventory.countDocuments({
-            userId: shopkeeperId,
-            createdAt: { $gte: startOfCurrentMonth },
-      });
-
-      // ===== PREVIOUS MONTH INVOICES =====
-      const prevInvoices = await Inventory.countDocuments({
-            userId: shopkeeperId,
-            createdAt: {
-                  $gte: startOfPrevMonth,
-                  $lt: endOfPrevMonth,
-            },
-      });
-
-      // ===== % CALCULATION =====
-      const calcPercent = (current: number, prev: number) => {
-            if (prev === 0) return current === 0 ? 0 : 100;
-            return ((current - prev) / prev) * 100;
+      // Build match condition for shopkeeper if provided
+      const matchCondition: any = {
+            createdAt: { $gte: start, $lte: end },
+            totalAmount: { $ne: null },
       };
 
-      const invoiceGrowth = calcPercent(currentInvoices, prevInvoices);
+      const prevMatchCondition: any = {
+            createdAt: { $gte: prevStart, $lte: prevEnd },
+            totalAmount: { $ne: null },
+      };
+
+      if (shopkeeperId) {
+            if (!Types.ObjectId.isValid(shopkeeperId)) {
+                  throw new AppError('Invalid shopkeeperId', StatusCodes.BAD_REQUEST);
+            }
+            matchCondition.shopkeeperId = new Types.ObjectId(shopkeeperId);
+            prevMatchCondition.shopkeeperId = new Types.ObjectId(shopkeeperId);
+      }
+
+      // Current period stats
+      const currentStats = await Invoice.aggregate([
+            { $match: matchCondition },
+            {
+                  $group: {
+                        _id: null,
+                        totalSales: { $sum: '$totalAmount' },
+                        totalOrders: { $sum: 1 },
+                        avgOrderValue: { $avg: '$totalAmount' },
+                  },
+            },
+      ]);
+
+      // Previous period stats
+      const previousStats = await Invoice.aggregate([
+            { $match: prevMatchCondition },
+            {
+                  $group: {
+                        _id: null,
+                        totalSales: { $sum: '$totalAmount' },
+                        totalOrders: { $sum: 1 },
+                        avgOrderValue: { $avg: '$totalAmount' },
+                  },
+            },
+      ]);
+
+      const current = currentStats[0] || { totalSales: 0, totalOrders: 0, avgOrderValue: 0 };
+      const previous = previousStats[0] || { totalSales: 0, totalOrders: 0, avgOrderValue: 0 };
 
       return {
-            totalInvoices,
-            invoiceGrowth,
+            totalSales: current.totalSales || 0,
+            totalProfit: 0, // Will implement when cost field is added
+            totalOrders: current.totalOrders || 0,
+            avgOrderValue: current.avgOrderValue || 0,
+            salesGrowth: calculateGrowth(current.totalSales || 0, previous.totalSales || 0),
+            profitGrowth: 0, // Will implement when cost field is added
+            ordersGrowth: calculateGrowth(current.totalOrders || 0, previous.totalOrders || 0),
+            avgOrderGrowth: calculateGrowth(current.avgOrderValue || 0, previous.avgOrderValue || 0),
       };
 };
 
 const dashboardService = {
-      adminDashboardChart,
-      getAdminDashboardAnalytics,
-      getShopkeeperDashboardAnalytics,
+      getDashboardStats,
 };
 
 export default dashboardService;

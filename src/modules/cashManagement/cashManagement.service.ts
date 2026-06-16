@@ -98,16 +98,10 @@ Cash Summary:
 Analysis:
 ${recommendation}
 
-${
-      score < 75
-            ? '\nSuggestions for Improvement:\n' +
-              (cashInDrawer > startingDayCash * 0.3 ? '- Consider banking more cash regularly\n' : '') +
-              (banked === 0 && startingDayCash > 0 ? '- Make regular deposits to reduce cash handling risks\n' : '') +
-              (variancePercentage > 10 ? '- Audit your cash transactions for discrepancies\n' : '') +
-              '- Maintain detailed records of all cash movements\n'
-            : 'Keep up the good work! Your cash management practices are effective.'
-}
-
+   - If cash in drawer exceeds 50% of starting day cash, consider banking more frequently.
+   - If no banked cash and starting day cash is greater than zero, make regular deposits to reduce risk.
+   - If variance exceeds 10%, audit cash transactions for discrepancies.
+   - Maintain detailed records of all cash movements.
 ${score >= 90 ? '🏆 Excellent cash management!' : score >= 75 ? '✅ Good job!' : '⚠️ Please review your cash management practices.'}
     `.trim();
 

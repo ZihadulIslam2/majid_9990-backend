@@ -24,7 +24,7 @@ const createOrUpdateCashManagement = catchAsync(async (req, res) => {
 const getCashManagementByShopkeeper = catchAsync(async (req, res) => {
       const { shopkeeperId } = req.params;
 
-      const result = await cashManagementService.getCashManagementByShopkeeper(shopkeeperId);
+      const result = await cashManagementService.getCashManagementByShopkeeper(shopkeeperId as string);
 
       if (!result) {
             return sendResponse(res, {
@@ -32,7 +32,7 @@ const getCashManagementByShopkeeper = catchAsync(async (req, res) => {
                   success: false,
                   message: 'Cash management record not found for this shopkeeper',
                   data: null,
-            });
+        });
       }
 
       sendResponse(res, {
@@ -57,7 +57,8 @@ const getAllCashManagementRecords = catchAsync(async (req, res) => {
             meta: {
                   total: result.total,
                   limit,
-                  skip,
+                  page: Math.floor(skip / limit) + 1,
+                  totalPage: Math.ceil(result.total / limit),
             },
       });
 });
@@ -65,7 +66,7 @@ const getAllCashManagementRecords = catchAsync(async (req, res) => {
 const deleteCashManagement = catchAsync(async (req, res) => {
       const { shopkeeperId } = req.params;
 
-      await cashManagementService.deleteCashManagement(shopkeeperId);
+      await cashManagementService.deleteCashManagement(shopkeeperId as string);
 
       sendResponse(res, {
             statusCode: StatusCodes.OK,
@@ -78,7 +79,7 @@ const deleteCashManagement = catchAsync(async (req, res) => {
 const getCashManagementStats = catchAsync(async (req, res) => {
       const { shopkeeperId } = req.params;
 
-      const result = await cashManagementService.getCashManagementStats(shopkeeperId);
+      const result = await cashManagementService.getCashManagementStats(shopkeeperId as string);
 
       sendResponse(res, {
             statusCode: StatusCodes.OK,

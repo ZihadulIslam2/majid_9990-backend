@@ -75,3 +75,6 @@ const invoiceSchema = new Schema<IInvoice>(
 );
 
 export const Invoice = model<IInvoice>('Invoice', invoiceSchema);
+
+invoiceSchema.index({ createdAt: -1 });
+invoiceSchema.index({ shopkeeperId: 1, createdAt: -1 });

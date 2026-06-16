@@ -3,44 +3,20 @@ import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import dashboardService from './dashboard.service';
 
-const adminDashboardChart = catchAsync(async (req, res) => {
-      const result = await dashboardService.adminDashboardChart(req.query);
+const getDashboardStats = catchAsync(async (req, res) => {
+      const shopkeeperId = req.query.shopkeeperId as string | undefined;
+      const filter = (req.query.filter as 'daily' | 'monthly' | 'yearly') || 'monthly';
+
+      const result = await dashboardService.getDashboardStats(shopkeeperId, filter);
 
       sendResponse(res, {
             statusCode: StatusCodes.OK,
             success: true,
-            message: 'Admin dashboard chart fetched',
+            message: 'Dashboard stats fetched successfully',
             data: result,
       });
 });
 
-const getAdminDashboardAnalytics = catchAsync(async (req, res) => {
-      const result = await dashboardService.getAdminDashboardAnalytics();
-
-      sendResponse(res, {
-            statusCode: StatusCodes.OK,
-            success: true,
-            message: 'Admin dashboard analytics fetched',
-            data: result,
-      });
-});
-
-const getShopkeeperDashboardAnalytics = catchAsync(async (req, res) => {
-      const { id } = req.user;
-      const result = await dashboardService.getShopkeeperDashboardAnalytics(id);
-
-      sendResponse(res, {
-            statusCode: StatusCodes.OK,
-            success: true,
-            message: 'Shopkeeper dashboard analytics fetched',
-            data: result,
-      });
-});
-
-const dashboardController = {
-      adminDashboardChart,
-      getAdminDashboardAnalytics,
-      getShopkeeperDashboardAnalytics,
+export default {
+      getDashboardStats,
 };
-
-export default dashboardController;
