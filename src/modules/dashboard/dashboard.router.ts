@@ -1,12 +1,9 @@
-import { Router } from "express";
-import dashboardController from "./dashboard.controller";
-import { protect } from "../../middlewares/auth.middleware";
+import { Router } from 'express';
+import { protect } from '../../middlewares/auth.middleware';
+import dashboardController from './dashboard.controller';
 
 const router = Router();
 
-router.get('/chart', dashboardController.adminDashboardChart)
-router.get('/analytics', dashboardController.getAdminDashboardAnalytics)
-router.get('/shopkeeper-analytics', protect, dashboardController.getShopkeeperDashboardAnalytics)
+router.get('/stats', protect, dashboardController.getDashboardStats);
 
-const dashboardRouter = router;
-export default dashboardRouter;
+export default router;
