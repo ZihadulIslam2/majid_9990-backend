@@ -7,7 +7,6 @@ import { User } from '../user/user.model';
 import { IRepairRequest, IRepairRequestStatusUpdatePayload } from './repairRequest.interface';
 import RepairRequest from './repairRequest.model';
 
-
 const assertValidRepairRequestId = (id: string) => {
       if (!Types.ObjectId.isValid(id)) {
             throw new AppError('Valid repair request id is required', StatusCodes.BAD_REQUEST);
@@ -20,6 +19,7 @@ const addNewRepairRequest = async (payload: IRepairRequest, files: Express.Multe
 
       if (!payload.firstName) throw new AppError('First name is required', StatusCodes.BAD_REQUEST);
       if (!payload.email) throw new AppError('Email is required', StatusCodes.BAD_REQUEST);
+      if (!payload.phoneNumber) throw new AppError('Phone number is required', StatusCodes.BAD_REQUEST); // ✅ ADDED
       if (!payload.deviceModel) throw new AppError('Device model is required', StatusCodes.BAD_REQUEST);
       if (!payload.description) throw new AppError('Description is required', StatusCodes.BAD_REQUEST);
 
@@ -35,6 +35,8 @@ const addNewRepairRequest = async (payload: IRepairRequest, files: Express.Multe
             userId: payload.userId || user._id,
             firstName: payload.firstName,
             email: payload.email,
+            phoneNumber: payload.phoneNumber, // ✅ ADDED
+            price: payload.price || 0, // ✅ ADDED
             deviceModel: payload.deviceModel,
             IMEINumber: payload.IMEINumber,
             description: payload.description,
@@ -80,11 +82,11 @@ const generateAndSaveTechnicianFeedback = async (id: string) => {
             throw new AppError('Repair request not found', StatusCodes.NOT_FOUND);
       }
 
-const feedback = await generateTechnicianFeedback({
-      customerName: repair.firstName,
-      deviceModel: repair.deviceModel,
-      issueReported: repair.description,
-});
+      const feedback = await generateTechnicianFeedback({
+            customerName: repair.firstName,
+            deviceModel: repair.deviceModel,
+            issueReported: repair.description,
+      });
 
       const result = await RepairRequest.findByIdAndUpdate(
             id,
@@ -293,7 +295,6 @@ const getUserDescriptions = async (userId: string) => {
 
       return repairRequests;
 };
-
 
 const repairRequestService = {
       addNewRepairRequest,
