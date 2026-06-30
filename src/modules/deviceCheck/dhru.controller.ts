@@ -1155,7 +1155,9 @@ export const getRecentChecksHistory = async (req: Request, res: Response, next: 
 
             const [history, total] = await Promise.all([
                   ScanInfo.find(filter)
-                        .select('userId deviceName imei deviceStatus riskMeter marketValue createdAt updatedAt')
+                        .select(
+                              'userId deviceName imei deviceStatus riskMeter marketValue createdAt updatedAt serviceId'
+                        )
                         .sort({ updatedAt: -1 })
                         .skip(skip)
                         .limit(limit)
