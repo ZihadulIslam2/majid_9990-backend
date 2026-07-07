@@ -4,7 +4,10 @@ import sendResponse from '../../utils/sendResponse';
 import customerService from './customer.service';
 
 const createCustomer = catchAsync(async (req, res) => {
-      const userId = req.user._id;
+      const userId = req.user.role === 'staff' && req.user.shopkeeperId ? req.user.shopkeeperId : req.user._id;
+      if (req.user.role === 'staff' && req.user.shopkeeperId) {
+            req.body.shopkeeperId = req.user.shopkeeperId;
+      }
       const result = await customerService.createCustomer(userId, req.body ?? {});
 
       sendResponse(res, {

@@ -44,7 +44,7 @@ const userSchema = new Schema<IUser>(
             },
             role: {
                   type: String,
-                  enum: ['user', 'admin', 'shopkeeper'],
+                  enum: ['user', 'admin', 'shopkeeper', 'staff'],
                   default: 'user',
             },
             image: {
@@ -62,6 +62,11 @@ const userSchema = new Schema<IUser>(
             shopName: { type: String, default: '' },
             shopAddress: { type: String, default: '' },
             whatsappNumber: { type: String, default: '' },
+            shopkeeperId: {
+                  type: Schema.Types.ObjectId,
+                  ref: 'User',
+                  default: null,
+            },
             totalReviews: { type: Number, default: 0 },
             averageRating: { type: Number, default: 0 },
             otp: { type: String, default: null },

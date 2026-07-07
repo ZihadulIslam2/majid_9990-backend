@@ -65,3 +65,31 @@ export const isDriver = (req: Request, res: Response, next: NextFunction): void 
       }
       next();
 };
+
+export const isShopkeeper = (req: Request, res: Response, next: NextFunction): void => {
+      if (req.user?.role !== 'shopkeeper') {
+            throw new AppError('Access denied. You are not a shopkeeper.', StatusCodes.FORBIDDEN);
+      }
+      next();
+};
+
+export const isStaff = (req: Request, res: Response, next: NextFunction): void => {
+      if (req.user?.role !== 'staff') {
+            throw new AppError('Access denied. You are not a staff member.', StatusCodes.FORBIDDEN);
+      }
+      next();
+};
+
+export const isShopkeeperOrStaff = (req: Request, res: Response, next: NextFunction): void => {
+      if (req.user?.role !== 'shopkeeper' && req.user?.role !== 'staff') {
+            throw new AppError('Access denied. Only shopkeepers and staff can perform this action.', StatusCodes.FORBIDDEN);
+      }
+      next();
+};
+
+export const isAdminOrShopkeeper = (req: Request, res: Response, next: NextFunction): void => {
+      if (req.user?.role !== 'admin' && req.user?.role !== 'shopkeeper') {
+            throw new AppError('Access denied. Only admins and shopkeepers can perform this action.', StatusCodes.FORBIDDEN);
+      }
+      next();
+};

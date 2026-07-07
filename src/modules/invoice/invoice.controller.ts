@@ -4,6 +4,9 @@ import sendResponse from '../../utils/sendResponse';
 import invoiceService from './invoice.service';
 
 const createInvoice = catchAsync(async (req, res) => {
+      if (req.user.role === 'staff' && req.user.shopkeeperId) {
+            req.body.shopkeeperId = req.user.shopkeeperId;
+      }
       const result = await invoiceService.createInvoice(req.body, req.file);
 
       sendResponse(res, {

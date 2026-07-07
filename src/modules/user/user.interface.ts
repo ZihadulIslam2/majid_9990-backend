@@ -1,4 +1,4 @@
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 
 export interface IUser {
       _id: string;
@@ -27,6 +27,7 @@ export interface IUser {
       whatsappNumber?: string;
       totalReviews?: number;
       averageRating?: number;
+      shopkeeperId?: Types.ObjectId | string;
       createdAt?: Date;
       updatedAt?: Date;
 }
