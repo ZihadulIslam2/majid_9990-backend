@@ -218,7 +218,9 @@ const resendOtpCode = async (email: string) => {
 };
 
 const getAllUsers = async () => {
-      const result = await User.find().select('username firstName lastName email role createdAt updatedAt');
+      const result = await User.find().select(
+            'username firstName lastName email phone role image isVerified wageType wageAmount workingDays weekendDays idVerificationStatus idNumber createdAt updatedAt'
+      );
       return result;
 };
 
@@ -282,8 +284,27 @@ const createStaff = async (payload: {
       password: string;
       phone?: string;
       shopkeeperId: string;
+      wageType?: 'per-day' | 'per-hour';
+      wageAmount?: number;
+      workingDays?: string[];
+      weekendDays?: string[];
+      idVerificationStatus?: 'pending' | 'verified' | 'rejected';
+      idNumber?: string;
 }) => {
-      const { firstName, lastName, email, password, phone, shopkeeperId } = payload;
+      const {
+            firstName,
+            lastName,
+            email,
+            password,
+            phone,
+            shopkeeperId,
+            wageType,
+            wageAmount,
+            workingDays,
+            weekendDays,
+            idVerificationStatus,
+            idNumber,
+      } = payload;
 
       if (!shopkeeperId) {
             throw new AppError('Shopkeeper ID is required', StatusCodes.BAD_REQUEST);
@@ -315,6 +336,12 @@ const createStaff = async (payload: {
             role: 'staff',
             shopkeeperId: new Types.ObjectId(shopkeeperId),
             isVerified: true,
+            wageType,
+            wageAmount,
+            workingDays,
+            weekendDays,
+            idVerificationStatus,
+            idNumber,
       });
 
       await createNotification({

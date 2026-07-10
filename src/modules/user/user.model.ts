@@ -62,6 +62,31 @@ const userSchema = new Schema<IUser>(
             shopName: { type: String, default: '' },
             shopAddress: { type: String, default: '' },
             whatsappNumber: { type: String, default: '' },
+            wageType: {
+                  type: String,
+                  enum: ['per-day', 'per-hour'],
+            },
+            wageAmount: {
+                  type: Number,
+                  min: 0,
+            },
+            workingDays: {
+                  type: [String],
+                  default: [],
+            },
+            weekendDays: {
+                  type: [String],
+                  default: [],
+            },
+            idVerificationStatus: {
+                  type: String,
+                  enum: ['pending', 'verified', 'rejected'],
+                  default: 'pending',
+            },
+            idNumber: {
+                  type: String,
+                  default: '',
+            },
             shopkeeperId: {
                   type: Schema.Types.ObjectId,
                   ref: 'User',

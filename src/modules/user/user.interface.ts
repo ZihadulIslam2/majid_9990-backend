@@ -25,6 +25,12 @@ export interface IUser {
       shopName?: string;
       shopAddress?: string;
       whatsappNumber?: string;
+      wageType?: 'per-day' | 'per-hour' | string;
+      wageAmount?: number;
+      workingDays?: string[];
+      weekendDays?: string[];
+      idVerificationStatus?: 'pending' | 'verified' | 'rejected' | string;
+      idNumber?: string;
       totalReviews?: number;
       averageRating?: number;
       shopkeeperId?: Types.ObjectId | string;
