@@ -34,6 +34,7 @@ export interface IUser {
       totalReviews?: number;
       averageRating?: number;
       shopkeeperId?: Types.ObjectId | string;
+      currency?: string;
       createdAt?: Date;
       updatedAt?: Date;
 }

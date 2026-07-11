@@ -94,6 +94,11 @@ const userSchema = new Schema<IUser>(
             },
             totalReviews: { type: Number, default: 0 },
             averageRating: { type: Number, default: 0 },
+            currency: {
+                  type: String,
+                  default: 'USD',
+                  uppercase: true,
+            },
             otp: { type: String, default: null },
             otpExpires: { type: Date, default: null },
             resetPasswordOtp: { type: String, default: null },
