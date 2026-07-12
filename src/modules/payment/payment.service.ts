@@ -3,6 +3,7 @@ import config from '../../config/config';
 import AppError from '../../errors/AppError';
 import { Payment } from './payment.model';
 import { creditUserBalance } from './balanceTransaction.service';
+import { TPaymentStatus } from './payment.interface';
 
 let stripeClient: InstanceType<typeof Stripe> | null = null;
 
@@ -114,7 +115,63 @@ const getMyPayments = async (userId: string) => {
 
 // Get All Payments (Admin)
 const getAllPayments = async () => {
-      return await Payment.find().populate('userId subscriptionId');
+      return await Payment.find().populate('userId subscriptionId').sort({ createdAt: -1 });
+};
+
+const updatePaymentStatus = async (paymentId: string, nextStatus: TPaymentStatus) => {
+      const allowedStatuses: TPaymentStatus[] = ['pending', 'paid', 'failed'];
+
+      if (!allowedStatuses.includes(nextStatus)) {
+            throw new AppError('Invalid payment status', 400);
+      }
+
+      const payment = await Payment.findById(paymentId);
+
+      if (!payment) {
+            throw new AppError('Payment not found', 404);
+      }
+
+      if (payment.paymentStatus === nextStatus) {
+            return await Payment.findById(paymentId).populate('userId subscriptionId');
+      }
+
+      if (payment.paymentStatus === 'paid' && nextStatus !== 'paid') {
+            throw new AppError('Paid payments cannot be moved back to another status.', 400);
+      }
+
+      payment.paymentStatus = nextStatus;
+
+      if (nextStatus === 'paid') {
+            await creditUserBalance({
+                  userId: payment.userId.toString(),
+                  amount: payment.amount,
+                  currency: payment.currency,
+                  source: 'payment',
+                  description: `Balance credited from admin payment update ${payment.stripeSessionId ?? payment._id.toString()}`.trim(),
+                  referenceId: payment._id.toString(),
+                  paymentId: payment._id.toString(),
+            });
+      }
+
+      await payment.save();
+
+      return await Payment.findById(paymentId).populate('userId subscriptionId');
+};
+
+const deletePayment = async (paymentId: string) => {
+      const payment = await Payment.findById(paymentId);
+
+      if (!payment) {
+            throw new AppError('Payment not found', 404);
+      }
+
+      if (payment.paymentStatus === 'paid') {
+            throw new AppError('Paid payments cannot be deleted.', 400);
+      }
+
+      await payment.deleteOne();
+
+      return { _id: paymentId };
 };
 
 export default {
@@ -122,4 +179,6 @@ export default {
       handleStripeWebhook,
       getMyPayments,
       getAllPayments,
+      updatePaymentStatus,
+      deletePayment,
 };
