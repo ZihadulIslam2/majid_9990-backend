@@ -6,7 +6,7 @@
       "scripts": {
             "test": "echo \"Error: no test specified\" && exit 1",
             "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-            "prettier:check": "prettier --ignore-path .gitignore --write \"**/*.+(js|ts|json)\"",
+            "prettier:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"tests/**/*.js\" \"*.json\"",
             "lint": "eslint . --ext .ts",
             "start": "node dist/server.js",
             "build": "tsc"
