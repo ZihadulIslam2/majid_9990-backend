@@ -3,7 +3,7 @@ import { Model, Types } from 'mongoose';
 export interface IUser {
       _id: string;
       firstName: string;
-      lastName: string;
+      lastName?: string;
       email: string;
       phone: string;
       password: string;
