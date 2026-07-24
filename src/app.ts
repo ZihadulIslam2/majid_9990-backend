@@ -36,7 +36,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options('/{*corsPreflight}', cors(corsOptions));
 
 app.get('/api-docs.json', async (_req, res, next) => {
       try {
