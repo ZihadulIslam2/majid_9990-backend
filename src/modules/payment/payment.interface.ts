@@ -9,8 +9,8 @@ export interface IPayment {
       amount: number;
       currency: string;
 
-      stripeSessionId?: string;
-      stripePaymentIntentId?: string;
+      myPosOrderId?: string;
+      myPosTransactionRef?: string;
 
       paymentStatus: TPaymentStatus;
 

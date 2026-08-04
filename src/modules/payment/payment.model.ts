@@ -20,8 +20,12 @@ const paymentSchema = new Schema<IPayment>(
                   type: String,
                   default: 'usd',
             },
-            stripeSessionId: String,
-            stripePaymentIntentId: String,
+            myPosOrderId: {
+                  type: String,
+                  unique: true,
+                  sparse: true,
+            },
+            myPosTransactionRef: String,
             paymentStatus: {
                   type: String,
                   enum: ['pending', 'paid', 'failed'],

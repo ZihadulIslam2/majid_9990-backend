@@ -66,7 +66,7 @@ post /create-from-barcode/bulk
 
 ### How the payment system is working and deduct form users
 
-When a Stripe payment is confirmed, the amount is added to the user balance in payment.service.ts. Every credit and debit is also written to a new transaction ledger in balanceTransaction.model.ts, with the supporting logic in balanceTransaction.service.ts. The user schema now stores balance directly in user.model.ts.
+When myPOS sends a valid server-to-server `IPCPurchaseNotify` callback, the amount is added to the user balance in `payment.service.ts`. Every credit and debit is also written to a new transaction ledger in `balanceTransaction.model.ts`, with the supporting logic in `balanceTransaction.service.ts`. The user schema now stores balance directly in `user.model.ts`.
 
 For IMEI/device-check requests, the API is now protected and checks the service price from the catalog before calling the upstream provider. If the service is not free, the price is deducted from the user balance first. If the balance is not enough, the request is rejected and the service response is not returned. This is wired through dhru.routes.ts, dhru.controller.ts, and riskAnalysis.controller.ts.
 
@@ -74,13 +74,22 @@ A new history API was added so the user can see balance changes, including credi
 
 ##### How it works in practice:
 
-- User pays money through Stripe.
-- Webhook marks payment as paid and credits the user balance.
+- User is redirected to the hosted myPOS checkout.
+- The signed `IPCPurchaseNotify` callback marks the payment as paid and credits the user balance.
 - User calls an IMEI or analysis endpoint.
 - Server finds the service price in the IMEI catalog.
 - If balance is enough, the amount is deducted and the request continues.
 - If balance is not enough, the request fails.
 - User can view all balance activity through the history endpoint.
+
+### myPOS setup
+
+1. In the myPOS merchant portal, create or select the Checkout store and exchange the 2048-bit RSA key pair with myPOS.
+2. Copy the store ID, wallet number, key index, merchant private key, and the myPOS public certificate into the `MYPOS_*` variables in `.env` (see `.env.example`). Keep the private key server-side only.
+3. Set `MYPOS_CALLBACK_BASE_URL` to the public HTTPS API origin without a port. myPOS will call `/api/v1/payment/webhook`; it must be reachable over HTTPS.
+4. Use `https://www.mypos.com/vmp/checkout-test` while testing, then switch `MYPOS_CHECKOUT_URL` to `https://www.mypos.com/vmp/checkout` for production. Ensure `MYPOS_CURRENCY` is enabled for the Checkout store.
+
+The browser success return is informational only. Payment crediting occurs only after the callback signature and order amount/currency have been verified.
 
 ## Device checks (with details)
 

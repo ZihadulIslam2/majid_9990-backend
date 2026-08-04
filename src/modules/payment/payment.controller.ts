@@ -1,4 +1,3 @@
-import Stripe from 'stripe';
 import { Request, Response } from 'express';
 import config from '../../config/config';
 import catchAsync from '../../utils/catchAsync';
@@ -13,26 +12,31 @@ const createPayment = catchAsync(async (req, res) => {
       sendResponse(res, {
             statusCode: StatusCodes.OK,
             success: true,
-            message: 'Stripe session created',
+            message: 'myPOS checkout parameters created',
             data: session,
       });
 });
 
-// Webhook (IMPORTANT: raw body)
-const stripeWebhook = async (req: Request, res: Response) => {
-      const sig = req.headers['stripe-signature'];
+// myPOS sends a signed application/x-www-form-urlencoded server-to-server callback.
+const myPosWebhook = async (req: Request, res: Response) => {
+      try {
+            await paymentService.handleMyPosNotification(req.body);
+            res.status(StatusCodes.OK).type('text/plain').send('OK');
+      } catch (error: any) {
+            const statusCode = error?.statusCode || StatusCodes.BAD_REQUEST;
+            res.status(statusCode).type('text/plain').send('FAIL');
+      }
+};
 
-      if (!sig || Array.isArray(sig)) {
-            return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Missing stripe signature' });
+// These are browser return endpoints only. Payment confirmation always comes from myPosWebhook.
+const redirectFromMyPos = (destination: 'success' | 'cancel') => (_req: Request, res: Response) => {
+      const frontendUrl = config.frontend_url?.replace(/\/+$/, '');
+
+      if (!frontendUrl) {
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).send('FRONTEND_URL is not configured.');
       }
 
-      const stripe = new Stripe((config as any).stripe_secret_key as string);
-
-      const event = stripe.webhooks.constructEvent(req.body, sig, (config as any).stripe_webhook_secret as string);
-
-      await paymentService.handleStripeWebhook(event);
-
-      res.json({ received: true });
+      res.redirect(StatusCodes.SEE_OTHER, `${frontendUrl}/payment/${destination}`);
 };
 
 // My payments
@@ -83,7 +87,9 @@ const deletePayment = catchAsync(async (req, res) => {
 
 export default {
       createPayment,
-      stripeWebhook,
+      myPosWebhook,
+      myPosSuccessReturn: redirectFromMyPos('success'),
+      myPosCancelReturn: redirectFromMyPos('cancel'),
       getMyPayments,
       getAllPayments,
       updatePaymentStatus,

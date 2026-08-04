@@ -1,28 +1,105 @@
-import Stripe from 'stripe';
+import { randomBytes, sign, verify } from 'crypto';
 import config from '../../config/config';
 import AppError from '../../errors/AppError';
+import Subscription from '../subscription/subscription.model';
 import { User } from '../user/user.model';
-import { Payment } from './payment.model';
 import { creditUserBalance } from './balanceTransaction.service';
+import { Payment } from './payment.model';
 import { TPaymentStatus } from './payment.interface';
 
-let stripeClient: InstanceType<typeof Stripe> | null = null;
+type MyPosParameters = Record<string, string>;
 
-const getStripeClient = () => {
-      if (stripeClient) return stripeClient;
+const normalizePem = (value: string) => value.replace(/\\n/g, '\n');
 
-      const stripeSecretKey = (config as { stripe_secret_key?: string }).stripe_secret_key;
+const getMyPosConfiguration = () => {
+      const mypos = config.mypos;
+      const requiredValues = {
+            MYPOS_STORE_ID: mypos.storeId,
+            MYPOS_WALLET_NUMBER: mypos.walletNumber,
+            MYPOS_KEY_INDEX: mypos.keyIndex,
+            MYPOS_PRIVATE_KEY: mypos.privateKey,
+            MYPOS_API_PUBLIC_CERT: mypos.apiPublicCertificate,
+            MYPOS_CHECKOUT_URL: mypos.checkoutUrl,
+            MYPOS_CALLBACK_BASE_URL: mypos.callbackBaseUrl,
+            FRONTEND_URL: config.frontend_url,
+      };
 
-      if (!stripeSecretKey) {
-            throw new AppError('Stripe is not configured. Missing STRIPE_SECRET_KEY.', 500);
+      const missing = Object.entries(requiredValues)
+            .filter(([, value]) => !value)
+            .map(([name]) => name);
+
+      if (missing.length > 0) {
+            throw new AppError(`myPOS is not configured. Missing: ${missing.join(', ')}.`, 500);
       }
 
-      stripeClient = new Stripe(stripeSecretKey, {
-            apiVersion: '2026-04-22.dahlia' as any,
-      });
-
-      return stripeClient;
+      return {
+            storeId: mypos.storeId as string,
+            walletNumber: mypos.walletNumber as string,
+            keyIndex: mypos.keyIndex as string,
+            privateKey: normalizePem(mypos.privateKey as string),
+            apiPublicCertificate: normalizePem(mypos.apiPublicCertificate as string),
+            checkoutUrl: mypos.checkoutUrl as string,
+            callbackBaseUrl: removeTrailingSlash(mypos.callbackBaseUrl as string),
+            frontendUrl: removeTrailingSlash(config.frontend_url as string),
+            currency: mypos.currency.toUpperCase(),
+            language: mypos.language.toUpperCase(),
+      };
 };
+
+const removeTrailingSlash = (value: string) => value.replace(/\/+$/, '');
+
+const assertHttpsCallbackUrl = (value: string, name: string) => {
+      let parsed: URL;
+
+      try {
+            parsed = new URL(value);
+      } catch {
+            throw new AppError(`${name} must be a valid public HTTPS URL.`, 500);
+      }
+
+      if (parsed.protocol !== 'https:' || parsed.port) {
+            throw new AppError(`${name} must use HTTPS and must not include a port.`, 500);
+      }
+};
+
+const serializeSignaturePayload = (parameters: MyPosParameters) =>
+      Buffer.from(Object.entries(parameters).map(([, value]) => value).join('-')).toString('base64');
+
+const signMyPosParameters = (parameters: MyPosParameters, privateKey: string) =>
+      sign('RSA-SHA256', Buffer.from(serializeSignaturePayload(parameters)), privateKey).toString('base64');
+
+const verifyMyPosSignature = (parameters: Record<string, unknown>, publicCertificate: string) => {
+      const signature = parameters.Signature;
+
+      if (typeof signature !== 'string' || !signature || Object.keys(parameters).at(-1) !== 'Signature') {
+            return false;
+      }
+
+      const unsignedParameters: MyPosParameters = {};
+
+      for (const [key, value] of Object.entries(parameters)) {
+            if (key === 'Signature') continue;
+
+            if (typeof value !== 'string') {
+                  return false;
+            }
+
+            unsignedParameters[key] = value;
+      }
+
+      try {
+            return verify(
+                  'RSA-SHA256',
+                  Buffer.from(serializeSignaturePayload(unsignedParameters)),
+                  publicCertificate,
+                  Buffer.from(signature, 'base64')
+            );
+      } catch {
+            return false;
+      }
+};
+
+const toMinorUnitSafeAmount = (amount: number) => Math.round(amount * 100) / 100;
 
 const creditPaymentBalance = async (payment: any) => {
       const user = await User.findById(payment.userId);
@@ -45,66 +122,19 @@ const creditPaymentBalance = async (payment: any) => {
             amount: payment.amount,
             currency: payment.currency,
             source: 'payment',
-            description: `Balance credited from payment ${payment.stripeSessionId ?? ''}`.trim(),
+            description: `Balance credited from myPOS payment ${payment.myPosOrderId ?? ''}`.trim(),
             referenceId: payment._id.toString(),
             paymentId: payment._id.toString(),
       });
 };
 
-// ✅ Create Checkout Session
-const createPaymentSession = async (user: any, payload: any) => {
-      const stripe = getStripeClient();
-      const { amount, subscriptionId } = payload;
-      const frontendUrl = (config as { frontend_url?: string }).frontend_url ?? '';
-
-      const session = await stripe.checkout.sessions.create({
-            payment_method_types: ['card'],
-            mode: 'payment',
-            success_url: `${frontendUrl}/success`,
-            cancel_url: `${frontendUrl}/cancel`,
-            customer_email: user.email,
-
-            line_items: [
-                  {
-                        price_data: {
-                              currency: 'usd',
-                              product_data: {
-                                    name: 'Subscription Payment',
-                              },
-                              unit_amount: amount * 100, // cents
-                        },
-                        quantity: 1,
-                  },
-            ],
-
-            metadata: {
-                  userId: user._id.toString(),
-                  subscriptionId: subscriptionId || '',
-            },
-      });
-
-      // save pending payment
-      await Payment.create({
-            userId: user._id,
-            subscriptionId,
-            amount,
-            currency: 'usd',
-            stripeSessionId: session.id,
-            paymentStatus: 'pending',
-      });
-
-      return session;
-};
-
-const markPaymentAsPaid = async (payment: any, session: any) => {
-      const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
-
+const markPaymentAsPaid = async (payment: any, transactionReference: string) => {
       const updatedPayment = await Payment.findOneAndUpdate(
             { _id: payment._id, paymentStatus: { $ne: 'paid' } },
             {
                   paymentStatus: 'paid',
-                  stripePaymentIntentId: paymentIntentId,
-                  paymentMethod: session.payment_method_types?.[0],
+                  paymentMethod: 'myPOS',
+                  myPosTransactionRef: transactionReference,
             },
             { new: true }
       );
@@ -114,112 +144,129 @@ const markPaymentAsPaid = async (payment: any, session: any) => {
       }
 };
 
-// Handle Webhook
-const handleStripeWebhook = async (event: any) => {
-      if (event.type === 'checkout.session.completed') {
-            const session: any = event.data.object;
+const createPaymentSession = async (user: any, payload: { subscriptionId?: string }) => {
+      const { subscriptionId } = payload;
 
-            const payment = await Payment.findOne({ stripeSessionId: session.id, paymentStatus: { $ne: 'paid' } });
-
-            if (payment) {
-                  await markPaymentAsPaid(payment, session);
-            }
+      if (!subscriptionId) {
+            throw new AppError('A subscription plan is required to create a payment.', 400);
       }
 
-      if (event.type === 'payment_intent.payment_failed') {
-            const intent: any = event.data.object;
+      const subscription = await Subscription.findById(subscriptionId);
 
-            await Payment.findOneAndUpdate(
-                  { stripePaymentIntentId: intent.id },
-                  {
-                        paymentStatus: 'failed',
-                  }
-            );
+      if (!subscription || !subscription.isAvailable || subscription.customPricing) {
+            throw new AppError('This subscription plan is not available for online payment.', 400);
       }
-};
 
-const syncPendingPayments = async () => {
-      const stripe = getStripeClient();
-      const pendingPayments = await Payment.find({
+      const amount = toMinorUnitSafeAmount(subscription.price);
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+            throw new AppError('The subscription plan must have a valid price.', 400);
+      }
+
+      const mypos = getMyPosConfiguration();
+      assertHttpsCallbackUrl(mypos.callbackBaseUrl, 'MYPOS_CALLBACK_BASE_URL');
+      assertHttpsCallbackUrl(mypos.frontendUrl, 'FRONTEND_URL');
+
+      const orderId = `MYP-${Date.now()}-${randomBytes(6).toString('hex')}`;
+      const paymentPath = `${mypos.callbackBaseUrl}/api/v1/payment`;
+      const amountAsString = amount.toFixed(2);
+      const itemName = subscription.name.slice(0, 255);
+
+      const parameters: MyPosParameters = {
+            IPCmethod: 'IPCPurchase',
+            IPCVersion: '1.4',
+            IPCLanguage: mypos.language,
+            SID: mypos.storeId,
+            WalletNumber: mypos.walletNumber,
+            Amount: amountAsString,
+            Currency: mypos.currency,
+            OrderID: orderId,
+            URL_OK: `${paymentPath}/return/success`,
+            URL_Cancel: `${paymentPath}/return/cancel`,
+            URL_Notify: `${paymentPath}/webhook`,
+            CardTokenRequest: '0',
+            KeyIndex: mypos.keyIndex,
+            PaymentParametersRequired: '1',
+            CustomerEmail: user.email,
+            CustomerFirstNames: user.firstName || 'Customer',
+            CustomerFamilyName: user.lastName || '-',
+            CustomerPhone: user.phone || '',
+            Note: `Subscription: ${subscription.name}`,
+            CartItems: '1',
+            Article_1: itemName,
+            Quantity_1: '1',
+            Price_1: amountAsString,
+            Currency_1: mypos.currency,
+            Amount_1: amountAsString,
+      };
+
+      parameters.Signature = signMyPosParameters(parameters, mypos.privateKey);
+
+      await Payment.create({
+            userId: user._id,
+            subscriptionId: subscription._id,
+            amount,
+            currency: mypos.currency,
+            myPosOrderId: orderId,
             paymentStatus: 'pending',
-            stripeSessionId: { $exists: true, $ne: '' },
-      })
-            .sort({ createdAt: 1 })
-            .limit(100)
-            .lean();
+            paymentMethod: 'myPOS',
+      });
 
-      let updatedCount = 0;
-
-      for (const payment of pendingPayments) {
-            if (!payment.stripeSessionId) {
-                  continue;
-            }
-
-            try {
-                  const session: any = await stripe.checkout.sessions.retrieve(payment.stripeSessionId, {
-                        expand: ['payment_intent'],
-                  });
-
-                  const paymentStatus = session.payment_status;
-                  const isPaid = paymentStatus === 'paid' || paymentStatus === 'no_payment_required';
-                  const isExpired = session.status === 'expired' || (paymentStatus === 'unpaid' && session.expires_at && session.expires_at * 1000 < Date.now());
-
-                  if (isPaid) {
-                        await markPaymentAsPaid(payment, session);
-                        updatedCount += 1;
-                        continue;
-                  }
-
-                  if (isExpired) {
-                        await Payment.findOneAndUpdate(
-                              { _id: payment._id, paymentStatus: { $ne: 'failed' } },
-                              { paymentStatus: 'failed' }
-                        );
-                        updatedCount += 1;
-                  }
-            } catch (error: any) {
-                  if (error?.type === 'StripeInvalidRequestError' || error?.code === 'resource_missing') {
-                        await Payment.findOneAndUpdate(
-                              { _id: payment._id, paymentStatus: { $ne: 'failed' } },
-                              { paymentStatus: 'failed' }
-                        );
-                        updatedCount += 1;
-                        continue;
-                  }
-
-                  console.error(`Payment sync failed for ${payment.stripeSessionId}`, error);
-            }
-      }
-
-      return { processed: pendingPayments.length, updatedCount };
+      return {
+            actionUrl: mypos.checkoutUrl,
+            params: parameters,
+            orderId,
+      };
 };
 
-const startPaymentStatusSyncScheduler = () => {
-      const intervalMs = Number(process.env.PAYMENT_SYNC_INTERVAL_MS || 1 * 60 * 1000);
+const handleMyPosNotification = async (payload: Record<string, unknown>) => {
+      const mypos = getMyPosConfiguration();
 
-      if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
-            return;
+      if (payload.IPCmethod !== 'IPCPurchaseNotify' || payload.SID !== mypos.storeId) {
+            throw new AppError('Invalid myPOS payment notification.', 400);
       }
 
-      setTimeout(() => {
-            void syncPendingPayments().catch((error) => {
-                  console.error('Initial payment sync failed', error);
-            });
-      }, 15000);
+      if (!verifyMyPosSignature(payload, mypos.apiPublicCertificate)) {
+            throw new AppError('Invalid myPOS payment notification signature.', 400);
+      }
 
-      setInterval(() => {
-            void syncPendingPayments().catch((error) => {
-                  console.error('Scheduled payment sync failed', error);
-            });
-      }, intervalMs);
+      const orderId = payload.OrderID;
+      const amount = payload.Amount;
+      const currency = payload.Currency;
+      const transactionReference = payload.IPC_Trnref;
+
+      if (
+            typeof orderId !== 'string' ||
+            typeof amount !== 'string' ||
+            typeof currency !== 'string' ||
+            typeof transactionReference !== 'string'
+      ) {
+            throw new AppError('Invalid myPOS payment notification payload.', 400);
+      }
+
+      const payment = await Payment.findOne({ myPosOrderId: orderId });
+
+      if (!payment) {
+            throw new AppError('Payment order was not found.', 404);
+      }
+
+      const notifiedAmount = Number(amount);
+
+      if (
+            !Number.isFinite(notifiedAmount) ||
+            payment.amount.toFixed(2) !== notifiedAmount.toFixed(2) ||
+            payment.currency !== currency.toUpperCase()
+      ) {
+            throw new AppError('myPOS payment notification does not match the payment order.', 400);
+      }
+
+      await markPaymentAsPaid(payment, transactionReference);
 };
 
-// Get My Payments
 const getMyPayments = async (userId: string) => {
       return await Payment.find({ userId }).sort({ createdAt: -1 });
 };
 
-// Get All Payments (Admin)
 const getAllPayments = async () => {
       return await Payment.find().populate('userId subscriptionId').sort({ createdAt: -1 });
 };
@@ -253,7 +300,7 @@ const updatePaymentStatus = async (paymentId: string, nextStatus: TPaymentStatus
                   amount: payment.amount,
                   currency: payment.currency,
                   source: 'payment',
-                  description: `Balance credited from admin payment update ${payment.stripeSessionId ?? payment._id.toString()}`.trim(),
+                  description: `Balance credited from admin payment update ${payment.myPosOrderId ?? payment._id.toString()}`.trim(),
                   referenceId: payment._id.toString(),
                   paymentId: payment._id.toString(),
             });
@@ -282,9 +329,7 @@ const deletePayment = async (paymentId: string) => {
 
 export default {
       createPaymentSession,
-      handleStripeWebhook,
-      syncPendingPayments,
-      startPaymentStatusSyncScheduler,
+      handleMyPosNotification,
       getMyPayments,
       getAllPayments,
       updatePaymentStatus,
